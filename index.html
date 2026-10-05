@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MD Editor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">M↓</span>
+      <span class="brand-name">MD Editor</span>
+      <input id="filename" class="filename-input" value="untitled.md" spellcheck="false" />
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      <button data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+      <button data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button data-cmd="strike" title="Strikethrough"><s>S</s></button>
+      <span class="sep"></span>
+      <button data-cmd="h1" title="Heading 1">H1</button>
+      <button data-cmd="h2" title="Heading 2">H2</button>
+      <button data-cmd="h3" title="Heading 3">H3</button>
+      <span class="sep"></span>
+      <button data-cmd="quote" title="Quote">&ldquo;</button>
+      <button data-cmd="code" title="Inline code">&lt;/&gt;</button>
+      <button data-cmd="codeblock" title="Code block">{ }</button>
+      <span class="sep"></span>
+      <button data-cmd="ul" title="Bullet list">&bull; List</button>
+      <button data-cmd="ol" title="Numbered list">1. List</button>
+      <button data-cmd="task" title="Task list">&#9745;</button>
+      <span class="sep"></span>
+      <button data-cmd="link" title="Link (Ctrl+K)">&#128279;</button>
+      <button data-cmd="image" title="Image">&#128247;</button>
+      <button data-cmd="table" title="Table">&#9638; Table</button>
+      <button data-cmd="hr" title="Horizontal rule">&mdash;</button>
+      <span class="sep"></span>
+      <button data-cmd="footnote" title="Footnote">[^]</button>
+    </div>
+
+    <div class="actions">
+      <div class="view-switch" id="viewSwitch">
+        <button data-view="edit" title="Editor only">Edit</button>
+        <button data-view="split" class="active" title="Split view">Split</button>
+        <button data-view="preview" title="Preview only">Preview</button>
+      </div>
+      <button id="themeToggle" class="icon-btn" title="Toggle theme">&#9788;</button>
+      <button id="openBtn" class="icon-btn" title="Open .md file">&#128194;</button>
+      <button id="saveBtn" class="icon-btn" title="Save as .md (Ctrl+S)">&#128190;</button>
+      <button id="exportHtmlBtn" class="icon-btn" title="Export as .html">&#128196;</button>
+      <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden />
+    </div>
+  </header>
+
+  <main class="workspace" id="workspace">
+    <section class="pane editor-pane" id="editorPane">
+      <textarea id="editor" spellcheck="false" placeholder="Tulis Markdown di sini..."></textarea>
+    </section>
+    <div class="divider" id="divider"></div>
+    <section class="pane preview-pane" id="previewPane">
+      <article id="preview" class="markdown-body"></article>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="wordCount">0 kata</span>
+    <span class="dot">&middot;</span>
+    <span id="charCount">0 karakter</span>
+    <span class="dot">&middot;</span>
+    <span id="readTime">0 min baca</span>
+    <span class="spacer"></span>
+    <span id="saveStatus">Tersimpan otomatis</span>
+  </footer>
+
+</div>
+<script src="script.js"></script>
+</body>
+</html>

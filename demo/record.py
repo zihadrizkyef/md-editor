@@ -30,6 +30,41 @@ class Recorder:
         self.outdir = outdir
         self.frames = []
         self.t0 = time.monotonic()
+        # Real pointer position, tracked so travel looks continuous.
+        self.px, self.py = WIDTH // 2, HEIGHT // 2
+        self.drift = 0.0
+
+    def move_to(self, x, y, seconds=0.5, steps=9):
+        """Glide a visible cursor and the real pointer to (x, y)."""
+        x0, y0 = self.px, self.py
+        self.px, self.py = x, y
+        self.page.js(f"__demo.cursorTo({x}, {y}, {int(seconds * 1000)})")
+
+        def walk():
+            for i in range(1, steps + 1):
+                e = 1 - (1 - i / steps) ** 3
+                self.page.call("Input.dispatchMouseEvent", type="mouseMoved",
+                               x=round(x0 + (x - x0) * e),
+                               y=round(y0 + (y - y0) * e))
+                time.sleep(seconds / steps)
+
+        walker = threading.Thread(target=walk, daemon=True)
+        walker.start()
+        self.hold(seconds + 0.05)
+        walker.join()
+
+    def click_at(self, x, y, seconds=0.5):
+        self.move_to(x, y, seconds)
+        self.page.js("__demo.cursorPress()")
+        self.page.click(x, y)
+        self.hold(0.4)
+
+    def click_el(self, selector, seconds=0.5):
+        point = self.page.js(f"__demo.elCenter({json.dumps(selector)})")
+        if not point:
+            return False
+        self.click_at(point["x"], point["y"], seconds)
+        return True
 
     def frame(self):
         path = os.path.join(self.outdir, f"f{len(self.frames):04d}.jpg")
@@ -48,6 +83,9 @@ class Recorder:
     def at(self, t):
         """Hold frames until the timeline reaches t seconds."""
         now = time.monotonic() - self.t0
+        self.drift += now - t
+        if os.environ.get("DEMO_DEBUG"):
+            print(f"  fence {t:5.1f}  actual {now:5.2f}  drift {now - t:+.2f}")
         if t > now:
             self.hold(t - now)
 

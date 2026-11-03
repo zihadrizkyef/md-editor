@@ -9,3 +9,6 @@ nul
 # ignored. See vendor/README.md to regenerate it.
 vendor/node_modules/
 vendor/package-lock.json
+
+# Frames captured while recording the demo video.
+demo/build/

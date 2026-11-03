@@ -1498,7 +1498,7 @@ viewSwitch.addEventListener("click", (e) => {
   workspace.classList.remove("view-edit", "view-split", "view-preview");
   workspace.classList.add(`view-${btn.dataset.view}`);
 });
-workspace.classList.add("view-split");
+workspace.classList.add("view-preview");
 
 /* ---- Theme toggle ---- */
 function applyTheme(theme) {

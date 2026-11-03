@@ -1,5 +1,11 @@
-﻿build/
+build/
 dist/
 __pycache__/
 *.pyc
 nul
+
+# The rich editor bundle is a generated artifact but is committed on purpose,
+# so the app builds and runs without a JS toolchain. Only its dependencies are
+# ignored. See vendor/README.md to regenerate it.
+vendor/node_modules/
+vendor/package-lock.json

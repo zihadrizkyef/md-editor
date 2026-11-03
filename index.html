@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MD Editor</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="rich-editor.css">
 </head>
 <body>
 <div class="app">
@@ -55,13 +56,25 @@
     </div>
   </header>
 
+  <nav class="tabbar" id="tabbar" aria-label="Dokumen terbuka"></nav>
+
   <main class="workspace" id="workspace">
     <section class="pane editor-pane" id="editorPane">
+      <div class="file-alert" id="fileAlert" hidden>
+        <span class="file-alert-icon" aria-hidden="true">&#9888;</span>
+        <span class="file-alert-text" id="fileAlertText"></span>
+        <span class="file-alert-actions">
+          <button type="button" id="fileAlertPrimary" class="alert-btn alert-btn-primary">Muat ulang dari disk</button>
+          <button type="button" id="fileAlertSecondary" class="alert-btn">Pertahankan versi saya</button>
+          <button type="button" id="fileAlertDismiss" class="alert-btn alert-btn-ghost" title="Tutup peringatan">&times;</button>
+        </span>
+      </div>
       <textarea id="editor" spellcheck="false" placeholder="Tulis Markdown di sini..."></textarea>
     </section>
     <div class="divider" id="divider"></div>
     <section class="pane preview-pane" id="previewPane">
       <article id="preview" class="markdown-body"></article>
+      <div id="richEditor" class="rich-editor-host" hidden></div>
     </section>
   </main>
 
@@ -76,6 +89,7 @@
   </footer>
 
 </div>
+<script src="rich-editor.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

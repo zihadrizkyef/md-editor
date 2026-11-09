@@ -30,6 +30,7 @@ bisa dipindah ke mana saja — tanpa installer, tanpa akun, tanpa koneksi.
 | 📄 | **Ekspor HTML** | Satu file HTML mandiri, CSS-nya sudah di dalam, tema ikut. |
 | 🔗 | **Satu instance** | Klik dua kali `.md` lain di Explorer → terbuka sebagai tab baru di jendela yang sudah jalan. |
 | 📊 | **Statistik tulisan** | Jumlah kata, karakter, dan estimasi waktu baca, langsung di status bar. |
+| ↩️ | **Undo / redo** | `Ctrl+Z` / `Ctrl+Y` bekerja sama di editor sumber maupun preview, dengan riwayat terpisah untuk tiap tab. |
 
 Dialek Markdown yang didukung: heading, tebal/miring/coret, kutipan, daftar
 (termasuk task list), tabel, blok kode, gambar, tautan, garis horizontal, dan
@@ -72,6 +73,7 @@ python app.py catatan.md      # langsung membuka file
 |---|---|
 | `Ctrl+B` / `Ctrl+I` | Tebal / miring |
 | `Ctrl+K` | Sisipkan tautan |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo (juga `Ctrl+Shift+Z`) |
 | `Ctrl+S` | Simpan |
 | `Tab` | Indentasi dua spasi di editor |
 | `/` di awal blok (preview) | Menu blok: heading, daftar, tabel, kode |

@@ -154,6 +154,14 @@ body {
 .toolbar button:hover {
   background: var(--btn-hover);
 }
+/* Undo/redo start disabled and light up once there is something to step into. */
+.toolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.toolbar button:disabled:hover {
+  background: transparent;
+}
 .toolbar .sep {
   width: 1px;
   height: 18px;

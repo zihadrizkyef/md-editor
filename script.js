@@ -499,6 +499,8 @@ const fileAlertPrimaryEl = document.getElementById("fileAlertPrimary");
 const fileAlertSecondaryEl = document.getElementById("fileAlertSecondary");
 const fileAlertDismissEl = document.getElementById("fileAlertDismiss");
 const tabbar = document.getElementById("tabbar");
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
 
 const STORAGE_KEY = "md-editor-content";
 const STORAGE_FILENAME = "md-editor-filename";
@@ -529,6 +531,7 @@ Ini adalah editor **Markdown** dengan pratinjau langsung.
 
 - Tampilan split editor & preview
 - Toolbar format cepat
+- Undo / redo di editor maupun preview
 - Simpan / buka file \`.md\`
 - Ekspor ke \`.html\`
 - Mode gelap & terang
@@ -576,7 +579,9 @@ function persistTabs() {
   try {
     localStorage.setItem(STORAGE_TABS, JSON.stringify({
       activeId: activeTabId,
-      tabs: tabs.map(({ richState, saveTimer, savePromise, ...tab }) => tab),
+      // `history` holds ProseMirror state objects: serializing them would throw
+      // on the cycles, and undo history lives for the session anyway.
+      tabs: tabs.map(({ richState, saveTimer, savePromise, history, ...tab }) => tab),
     }));
     const tab = activeTab();
     if (tab) {
@@ -691,6 +696,8 @@ function activateTab(id) {
   renderTabs();
   render();
   persistTabs();
+  if (!tab.history) resetHistory(tab, tab.content || "");
+  updateHistoryButtons();
   if (currentFilePath) { startWatching(); checkForExternalChange(); }
 }
 
@@ -704,6 +711,7 @@ function createTab(data = {}) {
   };
   tabs.push(tab);
   activeTabId = null;
+  resetHistory(tab, tab.content || "");
   activateTab(tab.id);
   renderTabs();
   return tab;
@@ -776,6 +784,7 @@ async function openFilePath(path, newTab = true) {
       tabs.splice(tabs.indexOf(target), 1);
       activeTabId = null;
       tabs.push(target);
+      resetHistory(target, content);
       activateTab(target.id);
     } else {
       createTab(loaded);
@@ -832,6 +841,9 @@ function setContent(markdown) {
   editor.value = markdown;
   richDirty = false;
   pushToRich(markdown);
+  // Loading a whole new document (file open, disk reload) is not an edit the
+  // user can step back past, so it becomes the new floor of the undo stack.
+  resetHistory(activeTab(), markdown);
 }
 
 // Push text into the rich editor without treating it as a user edit.
@@ -882,6 +894,7 @@ async function initRichEditor() {
         // saving all read the same text.
         editor.value = markdown;
         richDirty = true;
+        recordSnapshot({ typing: true });
         updateStats();
         scheduleSave();
       },
@@ -933,6 +946,170 @@ function updateStats() {
   charCountEl.textContent = `${chars} karakter`;
   readTimeEl.textContent = `${minutes} min baca`;
 }
+
+/* ===================== Undo / redo =====================
+   One snapshot stack per tab, shared by both editing surfaces. The browser's
+   native textarea undo is unusable here: the app rewrites `editor.value` on tab
+   switches, disk reloads and toolbar commands, which corrupts that stack and
+   would even restore text that belongs to another tab. Snapshots also carry the
+   ProseMirror state when the change came from the rich preview, so undo there
+   puts the caret back where the edit was instead of jumping to the top. */
+
+const HISTORY_LIMIT = 100;    // snapshots kept per tab
+const TYPING_MERGE_MS = 700;  // keystrokes closer together form one undo step
+
+let historyApplying = false;  // a snapshot is being written back; ignore echoes
+let historyGuardTimer = null;
+
+function newHistory() {
+  return { entries: [], index: -1 };
+}
+
+function ensureHistory(tab) {
+  if (!tab.history || !Array.isArray(tab.history.entries) || !tab.history.entries.length) {
+    tab.history = newHistory();
+  }
+  return tab.history;
+}
+
+// The rich editor's full state (document + caret), or null when it is not the
+// active surface. Stored per snapshot so an undo restores the caret as well.
+function captureRichState() {
+  if (richMode !== "wysiwyg" || !richReady || !richHandle) return null;
+  if (typeof richHandle.captureState !== "function") return null;
+  try {
+    return richHandle.captureState();
+  } catch (err) {
+    return null;
+  }
+}
+
+function historySnapshot() {
+  return {
+    content: getContent(),
+    selStart: editor.selectionStart,
+    selEnd: editor.selectionEnd,
+    richState: captureRichState(),
+    t: Date.now(),
+  };
+}
+
+// Record the document as it stands now. `typing` marks keystroke-sized changes,
+// which merge into the previous snapshot so that a burst of typing is a single
+// undo step instead of one per character.
+function recordSnapshot({ typing = false } = {}) {
+  if (historyApplying) return;
+  const tab = activeTab();
+  if (!tab) return;
+  const history = ensureHistory(tab);
+  const snapshot = historySnapshot();
+  const top = history.entries[history.index];
+
+  if (top && top.content === snapshot.content) {
+    // Only the caret moved; keep it so the snapshot restores the right place.
+    top.selStart = snapshot.selStart;
+    top.selEnd = snapshot.selEnd;
+    if (snapshot.richState) top.richState = snapshot.richState;
+    return;
+  }
+
+  // Editing after an undo forks the history: whatever was redoable is gone.
+  if (history.index < history.entries.length - 1) history.entries.length = history.index + 1;
+
+  const last = history.entries[history.entries.length - 1];
+  // Only a snapshot that was itself typed into may absorb more keystrokes: the
+  // base snapshot of a document must stay intact or undo would have no floor.
+  if (typing && last && last.typing && snapshot.t - last.t < TYPING_MERGE_MS) {
+    Object.assign(last, snapshot);
+  } else {
+    snapshot.typing = typing;
+    history.entries.push(snapshot);
+    if (history.entries.length > HISTORY_LIMIT + 1) history.entries.shift();
+  }
+  history.index = history.entries.length - 1;
+  updateHistoryButtons();
+}
+
+// A whole new document (file opened, reloaded from disk) becomes the new floor:
+// there is nothing to step back to before it.
+function resetHistory(tab, content) {
+  if (!tab) return;
+  tab.history = newHistory();
+  tab.history.entries.push({
+    content: content !== undefined ? content : getContent(),
+    selStart: 0,
+    selEnd: 0,
+    richState: null,
+    t: Date.now(),
+  });
+  tab.history.index = 0;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  const tab = activeTab();
+  const history = tab && tab.history;
+  undoBtn.disabled = !history || history.index <= 0;
+  redoBtn.disabled = !history || history.index >= history.entries.length - 1;
+}
+
+// Write a snapshot back into both surfaces without it registering as an edit.
+function applyHistoryEntry(entry) {
+  historyApplying = true;
+  richApplying = true;
+  clearTimeout(historyGuardTimer);
+  clearTimeout(richApplyTimer);
+
+  editor.value = entry.content;
+  let richRestored = false;
+  if (richMode === "wysiwyg" && richReady && richHandle) {
+    if (entry.richState) {
+      try {
+        richRestored = richHandle.restoreState(entry.richState, entry.content);
+      } catch (err) {
+        richRestored = false;
+      }
+    }
+    if (!richRestored) pushToRich(entry.content);
+    richDirty = false;
+  }
+
+  // The rich state carries its own selection; the textarea needs its caret back.
+  if (!richRestored) {
+    const start = Math.min(entry.selStart || 0, editor.value.length);
+    const end = Math.min(entry.selEnd || start, editor.value.length);
+    editor.setSelectionRange(start, end);
+  }
+
+  render();
+  scheduleSave();
+  updateHistoryButtons();
+
+  // Crepe reports the restored document asynchronously; keep the guard up long
+  // enough that the echo is not recorded as a brand-new edit.
+  historyGuardTimer = setTimeout(() => {
+    historyApplying = false;
+    richApplying = false;
+    refreshRichDirty();
+  }, 400);
+}
+
+function stepHistory(direction) {
+  const tab = activeTab();
+  if (!tab) return false;
+  const history = ensureHistory(tab);
+  const target = history.index + direction;
+  if (target < 0 || target >= history.entries.length) return false;
+  history.index = target;
+  applyHistoryEntry(history.entries[target]);
+  return true;
+}
+
+function undo() { return stepHistory(-1); }
+function redo() { return stepHistory(1); }
+
+undoBtn.addEventListener("click", () => undo());
+redoBtn.addEventListener("click", () => redo());
 
 function syncTabStatus(tab) {
   if (tab.id === activeTabId) {
@@ -1195,6 +1372,7 @@ editor.addEventListener("input", () => {
   // preview is refreshed from it below.
   richDirty = false;
   pushToRich(editor.value);
+  recordSnapshot({ typing: true });
   render();
   scheduleSave();
 });
@@ -1362,6 +1540,10 @@ function runRichCommand(name, arg) {
   if (ok) {
     editor.value = richHandle.getMarkdown();
     richDirty = true;
+    // Crepe also announces this edit through markdownUpdated; recording here as
+    // well is harmless (identical content is a no-op) and covers the commands
+    // whose changes are not serialized back through that listener.
+    recordSnapshot();
     updateStats();
     scheduleSave();
   }
@@ -1399,6 +1581,7 @@ function wrapSelection(before, after = before, placeholder = "") {
   const cursorStart = start + before.length;
   editor.setSelectionRange(cursorStart, cursorStart + selected.length);
   pushToRich(newText);
+  recordSnapshot();
   render();
   scheduleSave();
 }
@@ -1417,11 +1600,12 @@ function prefixLines(prefix) {
   editor.focus();
   editor.setSelectionRange(lineStart, lineStart + newBlock.length);
   pushToRich(next);
+  recordSnapshot();
   render();
   scheduleSave();
 }
 
-function insertAtCursor(text, cursorOffset) {
+function insertAtCursor(text, cursorOffset, { record = true } = {}) {
   const start = editor.selectionStart;
   const end = editor.selectionEnd;
   const next = editor.value.slice(0, start) + text + editor.value.slice(end);
@@ -1430,6 +1614,7 @@ function insertAtCursor(text, cursorOffset) {
   const pos = start + (cursorOffset ?? text.length);
   editor.setSelectionRange(pos, pos);
   pushToRich(next);
+  if (record) recordSnapshot();
   render();
   scheduleSave();
 }
@@ -1441,12 +1626,13 @@ function insertFootnote() {
   let n = 1;
   while (existingIds.has(String(n))) n++;
   const id = String(n);
-  insertAtCursor(`[^${id}]`, 0);
+  insertAtCursor(`[^${id}]`, 0, { record: false });
   const withRef = editor.value;
   const sep = withRef.endsWith("\n") ? "" : "\n";
   const next = withRef + `${sep}\n[^${id}]: catatan kaki`;
   editor.value = next;
   pushToRich(next);
+  recordSnapshot();
   render();
   scheduleSave();
 }
@@ -1461,7 +1647,10 @@ document.getElementById("toolbar").addEventListener("click", (e) => {
 /* ---- Keyboard shortcuts ---- */
 editor.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); runToolbarAction("bold"); }
+  const key = e.key.toLowerCase();
+  if (mod && key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+  else if (mod && key === "y") { e.preventDefault(); redo(); }
+  else if (mod && key === "b") { e.preventDefault(); runToolbarAction("bold"); }
   else if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); runToolbarAction("italic"); }
   else if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); runToolbarAction("link"); }
   else if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveFile(); }
@@ -1470,6 +1659,25 @@ editor.addEventListener("keydown", (e) => {
     insertAtCursor("  ");
   }
 });
+
+// Undo/redo must claim the shortcut before ProseMirror's own history keymap
+// sees it, otherwise both stacks would step and the document would jump twice.
+// Capture on the host runs ahead of the listeners inside the editor, so the
+// event is stopped there rather than left to bubble.
+richHost.addEventListener("keydown", (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+  const key = e.key.toLowerCase();
+  if (key === "z") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.shiftKey) redo(); else undo();
+  } else if (key === "y") {
+    e.preventDefault();
+    e.stopPropagation();
+    redo();
+  }
+}, true);
 
 // Same shortcuts while the caret is inside the rich preview.
 richHost.addEventListener("keydown", (e) => {

@@ -218,6 +218,10 @@ def main():
         print("\n== source pane still works ==")
         # Focus the textarea explicitly first: the rich editor owns the caret
         # after the block tests, and the toolbar follows the focused surface.
+        # Split view keeps the source pane visible so it can actually take focus
+        # (preview-only mode hides it, and a hidden textarea cannot be focused).
+        s.ev("document.querySelector('#viewSwitch button[data-view=\"split\"]').click()")
+        time.sleep(0.3)
         s.ev("setContent('teks sumber\\n')")
         time.sleep(0.5)
         s.ev("""
